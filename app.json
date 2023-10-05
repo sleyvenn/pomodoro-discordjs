@@ -1,43 +1,17 @@
 {
-    "name": "p0mod0ro",
-    "description": "pomodoro timer discord bot",
-    "repository": "https://github.com/sleyvenn/p0mod0ro-discord-bot",
-    "logo": "https://i.imgur.com/xOXUzKx.png",
+    "name": "Pomodoro Timer",
+    "description": "Pomodoro Timer for Discord",
+    "repository": "https://github.com/sleyvenn/pomodoro-discordjs",
+    "logo": "",
     "keywords": "",
-    "image": "heroku/nodejs",
-    "buildpacks": [
-        {
-            "url": "heroku/nodejs"
-        }
-    ],
     "env": {
-        "token": {
+        "TOKEN": {
             "description": "The Discord Bot Token (https://discord.com/developers/applications)",
             "required": true
         },
-        "botID": {
+        "BOT_ID": {
             "description": "Client_ID",
             "required": true
-        },
-        "oauthv2link": {
-            "description": "oauthv2link. (https://discord.com/oauth2/authorize/)",
-            "required": false
-        },
-        "Admin": {
-            "description": "Adminbot",
-            "required": true
-        },
-        "ytcookie": {
-            "description": "youtube cookie",
-            "required": false
-        },
-        "Channel_log": {
-            "description": "Channel id",
-            "required": false
-        },
-        "Bot_leave_under_5_user": {
-            "description": "less than 5 bot users will automatically leave | true or false",
-            "required": false
         }
     }
 }
