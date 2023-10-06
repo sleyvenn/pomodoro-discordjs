@@ -19,8 +19,12 @@ const { REST } = require("@discordjs/rest")
 const { Routes } = require("discord-api-types/v9")
 const path = require("path")
 const commands = []
-const connection = require("./database/connection")
-const PomodoroSession = require("./models/PomodoroSession");
+const Timeout = new Set()
+const humanizeDuration = require("humanize-duration")
+
+const PomodoroContainer = require('./models/PomodoroContainer');
+const PomodoroSession = require('./models/PomodoroSession');
+
 
 readdirSync("./commands/").map(async dir => {
     readdirSync(`./commands/${dir}/`).map(async (cmd) => {
@@ -56,119 +60,68 @@ client.on("ready", () => {
 
 client.on("interactionCreate", async (interaction) => {
     if (interaction.isButton()) {
-
-        if (interaction.customId === "resume") {
-            await interaction.reply({
-                content: "Reanudando la sesión...",
-                ephemeral: true
-            })
-
-            connection.executeSQLTransaction(`SELECT * FROM pomodoro_sessions WHERE embed_message_id = '${interaction.message.id}' AND user_id = '${interaction.member.id}' AND (status = 0 OR status = 1)`,).then(rows => {
-                if (rows.length > 0) {
-                    interaction.editReply({
-                        content: "Sesión reanudada correctamente.",
-                        ephemeral: true
-                    })
-
-                    PomodoroSession.resumeSession(client, rows[0])
-                    client.channels.fetch(rows[0].voice_channel_id).then(channel => {
-                        channel.messages.fetch(rows[0].embed_message_id).then(message => {
-
-                            message.edit({
-                                components: [
-                                    new ActionRowBuilder().addComponents(
-                                        new ButtonBuilder().setCustomId("pause").setLabel("Pausar").setStyle(ButtonStyle.Primary).setEmoji("⏸️"),
-                                        new ButtonBuilder().setCustomId("cancel").setLabel("Cancelar").setStyle(ButtonStyle.Danger).setEmoji("❌")
-                                    )
-                                ]
-                            })
-                        })
-                    })
-                } else {
-                    interaction.editReply({
-                        content: "No puedes reanudar esta sesión. Si crees que es un error, contacta con el administrador.",
-                        ephemeral: true
-                    })
+        switch (interaction.customId) {
+            case "resume":
+                await interaction.reply({ content: "Reanudando pomodoro...", ephemeral: true })
+                if (PomodoroContainer.getPomodoroSessionByUser(interaction.user).resumePomodoro()) {
+                    await interaction.editReply({ content: "Pomodoro reanudado.", ephemeral: true })
                 }
-            }).catch(console.error)
 
+                setTimeout(() => {
+                    interaction.deleteReply();
+                }, 5000);
 
-            setTimeout(() => {
-                interaction.deleteReply()
-            }, 3000)
-        }
-
-        if (interaction.customId === "pause") {
-
-            await interaction.reply({
-                content: "Pausando la sesión...",
-                ephemeral: true
-            })
-
-            connection.executeSQLTransaction(`SELECT * FROM pomodoro_sessions WHERE embed_message_id = '${interaction.message.id}' AND user_id = '${interaction.member.id}' AND (status = 0 OR status = 1)`,).then(rows => {
-                if (rows.length > 0) {
-                    interaction.editReply({
-                        content: "Sesión pausada correctamente",
-                        ephemeral: true
-                    })
-
-                    PomodoroSession.pauseSession(client, rows[0])
-                    client.channels.fetch(rows[0].voice_channel_id).then(channel => {
-                        channel.messages.fetch(rows[0].embed_message_id).then(message => {
-
-                            message.edit({
-                                components: [
-                                    new ActionRowBuilder().addComponents(
-                                        new ButtonBuilder().setCustomId("resume").setLabel("Reanudar").setStyle(ButtonStyle.Success).setEmoji("▶️"),
-                                        new ButtonBuilder().setCustomId("cancel").setLabel("Cancelar").setStyle(ButtonStyle.Danger).setEmoji("❌")
-                                    )
-                                ]
-                            })
-                        })
-                    })
-                } else {
-                    interaction.editReply({
-                        content: "No puedes pausar esta sesión. Si crees que es un error, contacta con el administrador.",
-                        ephemeral: true
-                    })
+                break;
+            case "pause":
+                await interaction.reply({ content: "Pausando pomodoro...", ephemeral: true })
+                if (PomodoroContainer.getPomodoroSessionByUser(interaction.user).pausePomodoro()) {
+                    await interaction.editReply({ content: "Pomodoro pausado.", ephemeral: true })
                 }
-            }).catch(console.error)
 
-            setTimeout(() => {
-                interaction.deleteReply()
-            }, 3000)
+                setTimeout(() => {
+                    interaction.deleteReply();
+                }, 5000);
+
+                break;
+            case "cancel":
+                await interaction.reply({ content: "Cancelando pomodoro...", ephemeral: true })
+                const pomodoroSession = PomodoroContainer.getPomodoroSessionByUser(interaction.user);
+                PomodoroContainer.removePomodoroSession(pomodoroSession);
+                if (pomodoroSession.cancelPomodoro()) {
+                    await interaction.editReply({ content: "Pomodoro cancelado.", ephemeral: true })
+                }
+                break;
+            default:
+                break;
         }
+    }
 
-        if (interaction.customId === "cancel") {
-            await interaction.reply({
-                content: "Cancelando la sesión...",
-                ephemeral: true
-            })
+    else if (interaction.isCommand() || interaction.isContextMenu()) {
 
-            connection.executeSQLTransaction(`SELECT * FROM pomodoro_sessions WHERE embed_message_id = '${interaction.message.id}' AND user_id = '${interaction.member.id}' AND (status = 0 OR status = 1)`,).then(rows => {
-                if (rows.length > 0) {
+        if (!client.slash.has(interaction.commandName)) return
+        if (!interaction.guild) return
 
-                    if (rows[0].user_id !== interaction.member.id) {
-                        interaction.editReply({
-                            content: "No puedes cancelar una sesión que no es tuya.",
-                            ephemeral: true
-                        })
-                        return
-                    }
+        const command = client.slash.get(interaction.commandName)
 
-                    PomodoroSession.cancelSession(client, rows[0])
-                } else {
-                    interaction.editReply({
-                        content: "No puedes cancelar esta sesión. Si crees que es un error, contacta con el administrador.",
-                        ephemeral: true
-                    })
+        try {
+            if (command.timeout) {
+                if (Timeout.has(`${interaction.user.id}${command.name}`)) {
+                    return interaction.reply({ content: `Tienes que esperar **${humanizeDuration(command.timeout, { round: true })}** para usar el comando otra vez.`, ephemeral: true })
                 }
             }
-            ).catch(console.error)
-
+            if (command.permissions) {
+                if (!interaction.member.permissions.has(command.permissions)) {
+                    return interaction.reply({ content: `:x: Necesitas \`${command.permissions}\` para usar este comando.`, ephemeral: true })
+                }
+            }
+            command.run(interaction, client)
+            Timeout.add(`${interaction.user.id}${command.name}`)
             setTimeout(() => {
-                interaction.deleteReply()
-            }, 3000)
+                Timeout.delete(`${interaction.user.id}${command.name}`)
+            }, command.timeout)
+        } catch (error) {
+            console.error(error)
+            await interaction.reply({ content: ":x: Ha habido algún error al ejecutar el comando.", ephemeral: true })
         }
     }
 
@@ -176,43 +129,43 @@ client.on("interactionCreate", async (interaction) => {
 
 client.on("voiceStateUpdate", (oldState, newState) => {
     if (newState.channelId === process.env.DISCORD_VOICECHANNEL_CREATEROOM) {
-        connection.executeSQLTransaction(`SELECT * FROM pomodoro_sessions WHERE user_id = "${newState.member.id}" AND status = 0 OR status = 1`,).then(rows => {
-            if (rows.length > 0) {
-                console.log(newState.member.displayName + " ya tiene una sesión activa")
-                //TODO: Send message to user and cancel event
-                return
-            } else {
-                newState.guild.channels.create({
-                    name: `Sesión de ${newState.member.displayName}`,
-                    type: ChannelType.GuildVoice,
-                    parent: process.env.DISCORD_CATEGORY_ID,
-                    bitrate: 64000,
-                    permissionOverwrites: [
-                        {
-                            id: newState.member.id,
-                            allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.Connect, PermissionsBitField.Flags.Speak],
-                        },
-                        {
-                            id: newState.guild.roles.everyone.id,
-                            allow: [PermissionsBitField.Flags.ViewChannel],
-                            deny: [PermissionsBitField.Flags.Connect, PermissionsBitField.Flags.Speak],
-                        },
-                    ],
-                }).then(channel => {
-                    newState.member.voice.setChannel(channel)
-                    const pomodoroSession = new PomodoroSession(client, newState.member, channel);
-                    pomodoroSession.CreateSession();
+        var pomodoroSession = PomodoroContainer.getPomodoroSessionByUser(newState.member.user);
+        if (pomodoroSession !== undefined) {
+            client.channels.fetch(pomodoroSession.voiceChannel.id).then(channel => {
+                newState.setChannel(channel);
+            })
+        } else {
+            newState.guild.channels.create({
+                name: `Sesión de ${newState.member.displayName}`,
+                type: ChannelType.GuildVoice,
+                parent: process.env.DISCORD_CATEGORY_ID,
+                bitrate: 64000,
+                permissionOverwrites: [
+                    {
+                        id: newState.member.id,
+                        allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.Connect, PermissionsBitField.Flags.Speak],
+                    },
+                    {
+                        id: newState.guild.roles.everyone.id,
+                        allow: [PermissionsBitField.Flags.ViewChannel],
+                        deny: [PermissionsBitField.Flags.Connect, PermissionsBitField.Flags.Speak],
+                    },
+                ],
+            }).then(channel => {
+                pomodoroSession = new PomodoroSession(client, newState.member.user, channel)
 
-                    return channel
-                }).catch(console.error)
-            }
-        }).catch(console.error)
+                pomodoroSession.startPomodoro();
+                PomodoroContainer.addPomodoroSession(pomodoroSession);
+                newState.setChannel(channel);
+
+            })
+        }
     }
-})
+}),
 
-client.on("guildCreate", guild => {
+    client.on("guildCreate", guild => {
 
-})
+    })
 client.on("guildDelete", guild => {
 
 })
