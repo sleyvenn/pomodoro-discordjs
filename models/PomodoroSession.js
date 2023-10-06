@@ -29,10 +29,13 @@ class PomodoroSession {
             this.id = rows.insertId;
             this.startTimer();
             connection.close();
+            this.client.users.cache.get(this.user.id).send({ content: "Inicia la sesión Pomodoro." });
+            this.client.channels.cache.get(process.env.DISCORD_VOICECHANNEL_CREATEROOM).send({ content: `**${this.user.displayName}** ha iniciado una sesión Pomodoro.` });
         }).catch(err => {
             console.log(err);
             connection.close();
         });
+
     }
 
     startTimer(remainingTime = null) {
@@ -44,25 +47,10 @@ class PomodoroSession {
             switch (this.status) {
                 case PomodoroStatus.ACTIVE:
                     if (this.remainingTime <= 0) {
-
-                        //funcion de nextPhase???
-                        this.currentPhaseIndex++;
-                        this.currentPhase = PomodoroPhaseOrder[this.currentPhaseIndex];
-
-                        if (this.currentPhaseIndex === PomodoroPhaseOrder.length - 1) {
-                            this.endPomodoro();
-                        }
-
-                        else {
-                            this.voiceChannelAlert();
-                            this.updateEmbedMessage();
-                            this.remainingTime = timerConverter.minToMs(this.currentPhase.duration);
-                        }
-
+                        this.nextPhase();
                     } else {
                         this.updateEmbedMessage();
                     }
-
                     break;
                 case PomodoroStatus.PAUSED:
                     this.updateEmbedMessage();
@@ -83,6 +71,7 @@ class PomodoroSession {
         this.status = PomodoroStatus.PAUSED;
         clearInterval(this.timer);
         this.updateEmbedMessage();
+        this.client.users.cache.get(this.user.id).send({ content: "Pomodoro pausado." });
 
         return true;
     }
@@ -90,6 +79,7 @@ class PomodoroSession {
     resumePomodoro() {
         this.status = PomodoroStatus.ACTIVE;
         this.startTimer(this.remainingTime);
+        this.client.users.cache.get(this.user.id).send({ content: "Pomodoro reanudado." });
         return true;
     }
 
@@ -100,6 +90,7 @@ class PomodoroSession {
             this.status = PomodoroStatus.CANCELLED;
             this.voiceChannel.delete();
             connection.close();
+            this.client.users.cache.get(this.user.id).send({ content: "Pomodoro cancelado." });
 
             return true;
         }).catch(err => {
@@ -118,10 +109,27 @@ class PomodoroSession {
             this.voiceChannel.delete();
             this.updateEmbedMessage();
             connection.close();
+            this.client.users.cache.get(this.user.id).send({ content: "Pomodoro finalizado." });
         }).catch(err => {
             console.log(err);
             connection.close();
         });
+    }
+
+    nextPhase() {
+        this.currentPhaseIndex++;
+        this.currentPhase = PomodoroPhaseOrder[this.currentPhaseIndex];
+
+        if (this.currentPhaseIndex === PomodoroPhaseOrder.length - 1) {
+            this.endPomodoro();
+        }
+
+        else {
+            this.voiceChannelAlert();
+            this.updateEmbedMessage();
+            this.remainingTime = timerConverter.minToMs(this.currentPhase.duration);
+            this.client.users.cache.get(this.user.id).send({ content: "Ha comenzado la fase de **" + this.currentPhase.name + "**." });
+        }
     }
 
     updateEmbedMessage() {
@@ -235,6 +243,9 @@ class PomodoroSession {
     }
 
     voiceChannelAlert() {
+        //check if voice channel has users connected
+        if (this.voiceChannel.members.size === 0) return;
+
         const connection = joinVoiceChannel({
             channelId: this.voiceChannel.id,
             guildId: this.voiceChannel.guild.id,
@@ -285,15 +296,15 @@ const PomodoroStatus = {
 const PomodoroPhase = {
     FOCUS: {
         name: "Concentración",
-        duration: 0.5
+        duration: 25
     },
     SHORT_BREAK: {
         name: "Descanso Corto",
-        duration: 0.5
+        duration: 5
     },
     LONG_BREAK: {
         name: "Descanso Largo",
-        duration: 0.5
+        duration: 15
     },
     END: {
         name: "Fin",
