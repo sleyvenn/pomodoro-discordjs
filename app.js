@@ -1,6 +1,6 @@
 const Discord = require("discord.js")
 require("dotenv").config()
-const { Client, GatewayIntentBits, ActivityType, ChannelType, PermissionsBitField} = require('discord.js');
+const { Client, GatewayIntentBits, ActivityType, ChannelType, PermissionsBitField } = require('discord.js');
 const client = new Client({
     intents: [
         GatewayIntentBits.Guilds,
@@ -21,6 +21,7 @@ const path = require("path")
 const commands = []
 const Timeout = new Set()
 const humanizeDuration = require("humanize-duration")
+const dbConnection = require('./database/connection');
 
 const PomodoroContainer = require('./models/PomodoroContainer');
 client.pomodoroContainer = PomodoroContainer;
@@ -57,6 +58,30 @@ client.on("ready", () => {
         activities: [{ name: "Pomodoro", type: ActivityType.Playing }],
         status: 'idle',
     });
+
+    const connection = new dbConnection();
+
+    connection.query(`CREATE TABLE IF NOT EXISTS pomodoro_sessions (
+        id INT NOT NULL AUTO_INCREMENT,
+        user_id VARCHAR(255) NOT NULL,
+        voice_channel_id VARCHAR(255) NOT NULL,
+        embed_message_id VARCHAR(255) NULL,
+        status INT NULL DEFAULT 0,
+        start_time DATETIME NOT NULL,
+        end_time DATETIME NULL,
+        PRIMARY KEY (id))`).then(result => {
+
+        if (result.warningCount === 0) {
+            console.log("\x1b[32m%s\x1b[0m", "Tabla pomodoro_sessions creada correctamente.");
+        }
+        else {
+            console.log("\x1b[33m%s\x1b[0m", "Tabla pomodoro_sessions ya existente.");
+        }
+        connection.close();
+    }).catch((error) => {
+        console.log("\x1b[31m%s\x1b[0m", `Error al crear la tabla pomodoro_sessions: ${error}`)
+        connection.close();
+    })
 })
 
 client.on("interactionCreate", async (interaction) => {
