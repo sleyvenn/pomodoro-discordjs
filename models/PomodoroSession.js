@@ -4,7 +4,7 @@ const timerConverter = require('../utils/timerConverter');
 const formatDateToSQL = require('../utils/formatDate');
 const { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } = require('discord.js');
 const { joinVoiceChannel, createAudioPlayer, AudioPlayerStatus, createAudioResource } = require("@discordjs/voice");
-
+const PomodoroContainer = require('../models/PomodoroContainer');
 
 class PomodoroSession {
 
@@ -109,6 +109,7 @@ class PomodoroSession {
             this.voiceChannel.delete();
             this.updateEmbedMessage();
             connection.close();
+            this.client.pomodoroContainer.removePomodoroSession(this);
             this.client.users.cache.get(this.user.id).send({ content: "Pomodoro finalizado." });
         }).catch(err => {
             console.log(err);
@@ -187,7 +188,9 @@ class PomodoroSession {
             this.embedMessage.edit({
                 embeds: [embedMessage],
                 components: [actionRow]
-            })
+            }).catch(err => {
+                console.log(err);
+            });
         }
     }
 
@@ -304,7 +307,7 @@ const PomodoroPhase = {
     },
     LONG_BREAK: {
         name: "Descanso Largo",
-        duration: 15
+        duration: 10
     },
     END: {
         name: "Fin",

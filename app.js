@@ -1,6 +1,6 @@
 const Discord = require("discord.js")
 require("dotenv").config()
-const { Client, GatewayIntentBits, ActivityType, ChannelType, PermissionsBitField, ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } = require('discord.js');
+const { Client, GatewayIntentBits, ActivityType, ChannelType, PermissionsBitField} = require('discord.js');
 const client = new Client({
     intents: [
         GatewayIntentBits.Guilds,
@@ -23,6 +23,7 @@ const Timeout = new Set()
 const humanizeDuration = require("humanize-duration")
 
 const PomodoroContainer = require('./models/PomodoroContainer');
+client.pomodoroContainer = PomodoroContainer;
 const PomodoroSession = require('./models/PomodoroSession');
 
 
@@ -63,8 +64,12 @@ client.on("interactionCreate", async (interaction) => {
         switch (interaction.customId) {
             case "resume":
                 await interaction.reply({ content: "Reanudando pomodoro...", ephemeral: true })
-                if (PomodoroContainer.getPomodoroSessionByUser(interaction.user).resumePomodoro()) {
+                var pomodoroSession = client.pomodoroContainer.getPomodoroSessionByUser(interaction.user);
+                if (pomodoroSession) {
+                    pomodoroSession.resumePomodoro();
                     await interaction.editReply({ content: "Pomodoro reanudado.", ephemeral: true })
+                } else {
+                    await interaction.editReply({ content: "No puedes reanudar esta sesión pomodoro.", ephemeral: true })
                 }
 
                 setTimeout(() => {
@@ -74,8 +79,12 @@ client.on("interactionCreate", async (interaction) => {
                 break;
             case "pause":
                 await interaction.reply({ content: "Pausando pomodoro...", ephemeral: true })
-                if (PomodoroContainer.getPomodoroSessionByUser(interaction.user).pausePomodoro()) {
+                var pomodoroSession = client.pomodoroContainer.getPomodoroSessionByUser(interaction.user);
+                if (pomodoroSession) {
+                    pomodoroSession.pausePomodoro();
                     await interaction.editReply({ content: "Pomodoro pausado.", ephemeral: true })
+                } else {
+                    await interaction.editReply({ content: "No puedes pausar esta sesión pomodoro.", ephemeral: true })
                 }
 
                 setTimeout(() => {
@@ -85,10 +94,13 @@ client.on("interactionCreate", async (interaction) => {
                 break;
             case "cancel":
                 await interaction.reply({ content: "Cancelando pomodoro...", ephemeral: true })
-                const pomodoroSession = PomodoroContainer.getPomodoroSessionByUser(interaction.user);
-                PomodoroContainer.removePomodoroSession(pomodoroSession);
-                if (pomodoroSession.cancelPomodoro()) {
+                var pomodoroSession = client.pomodoroContainer.getPomodoroSessionByUser(interaction.user);
+                if (pomodoroSession) {
+                    pomodoroSession.cancelPomodoro();
+                    client.pomodoroContainer.removePomodoroSession(pomodoroSession);
                     await interaction.editReply({ content: "Pomodoro cancelado.", ephemeral: true })
+                } else {
+                    await interaction.editReply({ content: "No puedes cancelar esta sesión pomodoro.", ephemeral: true })
                 }
                 break;
             default:
@@ -129,7 +141,7 @@ client.on("interactionCreate", async (interaction) => {
 
 client.on("voiceStateUpdate", (oldState, newState) => {
     if (newState.channelId === process.env.DISCORD_VOICECHANNEL_CREATEROOM) {
-        var pomodoroSession = PomodoroContainer.getPomodoroSessionByUser(newState.member.user);
+        var pomodoroSession = client.pomodoroContainer.getPomodoroSessionByUser(newState.member.user);
         if (pomodoroSession !== undefined) {
             client.channels.fetch(pomodoroSession.voiceChannel.id).then(channel => {
                 newState.setChannel(channel);
@@ -155,7 +167,7 @@ client.on("voiceStateUpdate", (oldState, newState) => {
                 pomodoroSession = new PomodoroSession(client, newState.member.user, channel)
 
                 pomodoroSession.startPomodoro();
-                PomodoroContainer.addPomodoroSession(pomodoroSession);
+                client.pomodoroContainer.addPomodoroSession(pomodoroSession);
                 newState.setChannel(channel);
 
             })
