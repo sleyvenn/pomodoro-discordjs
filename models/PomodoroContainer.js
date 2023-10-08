@@ -51,7 +51,6 @@ class PomodoroContainer {
     static getPomodoroSessionById(id) {
         return this.pomodoroSessions.find(pomodoroSession => pomodoroSession.id === id);
     }
-
 }
 
 function cancelAllPomodoroSessions() {

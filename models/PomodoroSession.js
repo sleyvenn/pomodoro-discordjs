@@ -49,7 +49,7 @@ class PomodoroSession {
                     if (this.remainingTime <= 0) {
                         this.nextPhase();
                     } else {
-                        this.updateEmbedMessage();
+                        if (this.remainingTime % 15000 === 0) this.updateEmbedMessage();
                     }
                     break;
                 case PomodoroStatus.PAUSED:
@@ -69,10 +69,28 @@ class PomodoroSession {
 
     pausePomodoro() {
         this.status = PomodoroStatus.PAUSED;
-        clearInterval(this.timer);
         this.updateEmbedMessage();
+        clearInterval(this.timer);
         this.client.users.cache.get(this.user.id).send({ content: "Pomodoro pausado." });
+        //interval with pausedRemainingTime (30 minutes), then cancelPomodoro()
+        var pausedRemainingTime = timerConverter.minToMs(30);
+        var pausedTimer = setInterval(() => {
+            pausedRemainingTime -= 1000;
 
+            switch (pausedRemainingTime) {
+                case timerConverter.minToMs(10):
+                    this.client.users.cache.get(this.user.id).send({ content: "La sesión lleva pausada 20 minutos. Si no reanudas la sesión en 10 minutos se cancelará." });
+                case timerConverter.minToMs(5):
+                    this.client.users.cache.get(this.user.id).send({ content: "Si no reanudas la sesión en 5 minutos se cancelará." });
+                    break;
+                case timerConverter.minToMs(1):
+                    this.client.users.cache.get(this.user.id).send({ content: "Si no reanudas la sesión en 1 minuto se cancelará." });
+                    break;
+                default:
+                    break;
+            }
+
+        }, 1000);
         return true;
     }
 
@@ -80,6 +98,7 @@ class PomodoroSession {
         this.status = PomodoroStatus.ACTIVE;
         this.startTimer(this.remainingTime);
         this.client.users.cache.get(this.user.id).send({ content: "Pomodoro reanudado." });
+        this.updateEmbedMessage();
         return true;
     }
 
