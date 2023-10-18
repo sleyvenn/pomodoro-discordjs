@@ -4,29 +4,25 @@ const timerConverter = require('../utils/timerConverter');
 const formatDateToSQL = require('../utils/formatDate');
 const { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } = require('discord.js');
 const { joinVoiceChannel, createAudioPlayer, AudioPlayerStatus, createAudioResource } = require("@discordjs/voice");
-const PomodoroContainer = require('../models/PomodoroContainer');
+const PomodoroConfig = require('../models/PomodoroConfig');
 
 class PomodoroSession {
 
     constructor(client, user, voiceChannel) {
-        this.id = null;
         this.client = client;
         this.user = user;
         this.voiceChannel = voiceChannel;
-        this.status = PomodoroStatus.ACTIVE;
-        this.embedMessage = null;
-        this.currentPhase = PomodoroPhase.FOCUS;
-        this.currentPhaseIndex = 0;
     }
 
     startPomodoro() {
-        this.status = PomodoroStatus.ACTIVE;
+        this.status = PomodoroConfig.STATUS.ACTIVE;
         this.currentPhaseIndex = 0;
-        this.currentPhase = PomodoroPhaseOrder[this.currentPhaseIndex];
+        this.currentPhase = PomodoroConfig.PHASES.FOCUS;
 
         const connection = new dbConnection();
         connection.query('INSERT INTO pomodoro_sessions (user_id, voice_channel_id, status, start_time) VALUES (?, ?, ?, ?)', [this.user.id, this.voiceChannel.id, this.status, formatDateToSQL(new Date())]).then(rows => {
             this.id = rows.insertId;
+            this.createEmbedMessage();
             this.startTimer();
             connection.close();
             this.client.users.cache.get(this.user.id).send({ content: "Inicia la sesión Pomodoro." });
@@ -45,19 +41,19 @@ class PomodoroSession {
             this.remainingTime -= 1000;
 
             switch (this.status) {
-                case PomodoroStatus.ACTIVE:
+                case PomodoroConfig.STATUS.ACTIVE:
                     if (this.remainingTime <= 0) {
                         this.nextPhase();
                     } else {
                         if (this.remainingTime % 15000 === 0) this.updateEmbedMessage();
                     }
                     break;
-                case PomodoroStatus.PAUSED:
+                case PomodoroConfig.STATUS.PAUSED:
                     this.updateEmbedMessage();
                     clearInterval(this.timer);
                     break;
-                case PomodoroStatus.CANCELLED:
-                    this.voiceChannel.delete();
+                case PomodoroConfig.STATUS.CANCELLED:
+                    // this.voiceChannel.delete();
                     clearInterval(this.timer);
                     break;
                 default:
@@ -68,14 +64,13 @@ class PomodoroSession {
     }
 
     pausePomodoro() {
-        this.status = PomodoroStatus.PAUSED;
+        this.status = PomodoroConfig.STATUS.PAUSED;
         this.updateEmbedMessage();
         clearInterval(this.timer);
         this.client.users.cache.get(this.user.id).send({ content: "Pomodoro pausado." });
-        //interval with pausedRemainingTime (30 minutes), then cancelPomodoro()
         var pausedRemainingTime = timerConverter.minToMs(30);
-        var pausedTimer = setInterval(() => {
-            pausedRemainingTime -= 1000;
+        this.pausedTimer = setInterval(() => {
+            pausedRemainingTime -= 6000;
 
             switch (pausedRemainingTime) {
                 case timerConverter.minToMs(10):
@@ -84,18 +79,23 @@ class PomodoroSession {
                     this.client.users.cache.get(this.user.id).send({ content: "Si no reanudas la sesión en 5 minutos se cancelará." });
                     break;
                 case timerConverter.minToMs(1):
+                    console.log("hola!")
                     this.client.users.cache.get(this.user.id).send({ content: "Si no reanudas la sesión en 1 minuto se cancelará." });
                     break;
+                case 0:
+                    this.cancelPomodoro();
+                    clearInterval(pausedTimer);
                 default:
                     break;
             }
 
-        }, 1000);
+        }, 6000);
         return true;
     }
 
     resumePomodoro() {
-        this.status = PomodoroStatus.ACTIVE;
+        clearInterval(this.pausedTimer)
+        this.status = PomodoroConfig.STATUS.ACTIVE;
         this.startTimer(this.remainingTime);
         this.client.users.cache.get(this.user.id).send({ content: "Pomodoro reanudado." });
         this.updateEmbedMessage();
@@ -105,8 +105,8 @@ class PomodoroSession {
     cancelPomodoro() {
         clearInterval(this.timer);
         const connection = new dbConnection();
-        connection.query('UPDATE pomodoro_sessions SET status = ?, end_time = ? WHERE id = ?', [PomodoroStatus.CANCELLED, formatDateToSQL(new Date()), this.id]).then(() => {
-            this.status = PomodoroStatus.CANCELLED;
+        connection.query('UPDATE pomodoro_sessions SET status = ?, end_time = ? WHERE id = ?', [PomodoroConfig.STATUS.CANCELLED, formatDateToSQL(new Date()), this.id]).then(() => {
+            this.status = PomodoroConfig.STATUS.CANCELLED;
             this.voiceChannel.delete();
             connection.close();
             this.client.users.cache.get(this.user.id).send({ content: "Pomodoro cancelado." });
@@ -122,8 +122,8 @@ class PomodoroSession {
 
     endPomodoro() {
         const connection = new dbConnection();
-        connection.query('UPDATE pomodoro_sessions SET status = ?, end_time = ? WHERE id = ?', [PomodoroStatus.ENDED, formatDateToSQL(new Date()), this.id]).then(() => {
-            this.status = PomodoroStatus.ENDED;
+        connection.query('UPDATE pomodoro_sessions SET status = ?, end_time = ? WHERE id = ?', [PomodoroConfig.STATUS.ENDED, formatDateToSQL(new Date()), this.id]).then(() => {
+            this.status = PomodoroConfig.STATUS.ENDED;
             clearInterval(this.timer);
             this.voiceChannel.delete();
             this.updateEmbedMessage();
@@ -138,9 +138,9 @@ class PomodoroSession {
 
     nextPhase() {
         this.currentPhaseIndex++;
-        this.currentPhase = PomodoroPhaseOrder[this.currentPhaseIndex];
+        this.currentPhase = PomodoroConfig.PHASE_ORDER[this.currentPhaseIndex];
 
-        if (this.currentPhaseIndex === PomodoroPhaseOrder.length - 1) {
+        if (this.currentPhaseIndex === PomodoroConfig.PHASE_ORDER.length - 1) {
             this.endPomodoro();
         }
 
@@ -166,7 +166,7 @@ class PomodoroSession {
                 // .setImage(this.user.avatarURL)
                 .addFields(
                     { name: "Fase", value: this.currentPhase.name, inline: true },
-                    { name: "Siguiente Fase", value: PomodoroPhaseOrder[this.currentPhaseIndex + 1]?.name ?? "Fin", inline: true },
+                    { name: "Siguiente Fase", value: PomodoroConfig.PHASE_ORDER[this.currentPhaseIndex + 1]?.name ?? "Fin", inline: true },
                     {
                         name: "Información",
                         value:
@@ -178,7 +178,7 @@ class PomodoroSession {
                 )
                 .setTimestamp()
             var actionRow = new ActionRowBuilder()
-            if (this.status === PomodoroStatus.PAUSED) {
+            if (this.status === PomodoroConfig.STATUS.PAUSED) {
                 actionRow.addComponents(
                     new ButtonBuilder()
                         .setCustomId("resume")
@@ -220,7 +220,7 @@ class PomodoroSession {
             // .setImage(this.user.avatarURL)
             .addFields(
                 { name: "Fase", value: this.currentPhase.name, inline: true },
-                { name: "Siguiente Fase", value: PomodoroPhaseOrder[this.currentPhaseIndex + 1].name || "Fin", inline: true },
+                { name: "Siguiente Fase", value: PomodoroConfig.PHASE_ORDER[this.currentPhaseIndex + 1].name || "Fin", inline: true },
                 {
                     name: "Información",
                     value:
@@ -286,7 +286,7 @@ class PomodoroSession {
 }
 
 function fillProgressBar(percentage = 0) {
-    const progressBarEmpty = PomodoroEmojisBar.FIRST_EMPTY + PomodoroEmojisBar.MIDDLE_EMPTY.repeat(8) + PomodoroEmojisBar.LAST_EMPTY;
+    const progressBarEmpty = PomodoroConfig.EMOJIS_BAR.FIRST_EMPTY + PomodoroConfig.EMOJIS_BAR.MIDDLE_EMPTY.repeat(8) + PomodoroConfig.EMOJIS_BAR.LAST_EMPTY;
 
     var filled = Math.round(percentage / 10);
 
@@ -295,66 +295,17 @@ function fillProgressBar(percentage = 0) {
     }
 
     else if (filled === 1) {
-        return PomodoroEmojisBar.FIRST_FULL + PomodoroEmojisBar.MIDDLE_EMPTY.repeat(8) + PomodoroEmojisBar.LAST_EMPTY;
+        return PomodoroConfig.EMOJIS_BAR.FIRST_FULL + PomodoroConfig.EMOJIS_BAR.MIDDLE_EMPTY.repeat(8) + PomodoroConfig.EMOJIS_BAR.LAST_EMPTY;
     }
 
     else if (filled > 1 && filled <= 9) {
-        return PomodoroEmojisBar.FIRST_FULL + PomodoroEmojisBar.MIDDLE_FULL.repeat(filled - 1) + PomodoroEmojisBar.MIDDLE_EMPTY.repeat(9 - filled) + PomodoroEmojisBar.LAST_EMPTY;
+        return PomodoroConfig.EMOJIS_BAR.FIRST_FULL + PomodoroConfig.EMOJIS_BAR.MIDDLE_FULL.repeat(filled - 1) + PomodoroConfig.EMOJIS_BAR.MIDDLE_EMPTY.repeat(9 - filled) + PomodoroConfig.EMOJIS_BAR.LAST_EMPTY;
     }
 
     else if (filled === 10) {
-        return PomodoroEmojisBar.FIRST_FULL + PomodoroEmojisBar.MIDDLE_FULL.repeat(8) + PomodoroEmojisBar.LAST_FULL;
+        return PomodoroConfig.EMOJIS_BAR.FIRST_FULL + PomodoroConfig.EMOJIS_BAR.MIDDLE_FULL.repeat(8) + PomodoroConfig.EMOJIS_BAR.LAST_FULL;
     }
 
 }
-
-const PomodoroStatus = {
-    ACTIVE: 0,
-    PAUSED: 1,
-    ENDED: 2,
-    CANCELLED: 3
-}
-
-const PomodoroPhase = {
-    FOCUS: {
-        name: "Concentración",
-        duration: 25
-    },
-    SHORT_BREAK: {
-        name: "Descanso Corto",
-        duration: 5
-    },
-    LONG_BREAK: {
-        name: "Descanso Largo",
-        duration: 10
-    },
-    END: {
-        name: "Fin",
-        duration: 0
-    }
-}
-
-const PomodoroPhaseOrder = [
-    PomodoroPhase.FOCUS,
-    PomodoroPhase.SHORT_BREAK,
-    PomodoroPhase.FOCUS,
-    PomodoroPhase.SHORT_BREAK,
-    PomodoroPhase.FOCUS,
-    PomodoroPhase.SHORT_BREAK,
-    PomodoroPhase.FOCUS,
-    PomodoroPhase.LONG_BREAK,
-    PomodoroPhase.END
-]
-
-const PomodoroEmojisBar = {
-    FIRST_EMPTY: "<:bar1:1096134440377385180>",
-    FIRST_FULL: "<:bar2:1096134442302570586>",
-    MIDDLE_EMPTY: "<:bar5:1096134446937276497>",
-    MIDDLE_FULL: "<:bar6:1096134448438845470>",
-    LAST_EMPTY: "<:bar3:1096134443623792791>",
-    LAST_FULL: "<:bar4:1096134444944998552>"
-}
-
-
 
 module.exports = PomodoroSession;
