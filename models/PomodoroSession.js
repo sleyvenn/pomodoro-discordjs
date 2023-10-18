@@ -174,7 +174,7 @@ class PomodoroSession {
                             "\nEste canal de voz será eliminado una vez finalice o canceles la sesión.",
                         inline: false
                     },
-                    { name: "Progreso", value: `${fillProgressBar(percentage)} - ${percentage}%`, inline: true },
+                    { name: "Progreso", value: `${this.fillProgressBar(percentage)} - ${percentage}%`, inline: true },
                 )
                 .setTimestamp()
             var actionRow = new ActionRowBuilder()
@@ -228,7 +228,7 @@ class PomodoroSession {
                         "\nEste canal de voz será eliminado una vez finalice o canceles la sesión.",
                     inline: false
                 },
-                { name: "Progreso", value: `${fillProgressBar()} - 0%`, inline: true },
+                { name: "Progreso", value: `${this.fillProgressBar()} - 0%`, inline: true },
             )
             .setTimestamp()
 
@@ -283,29 +283,29 @@ class PomodoroSession {
         });
     }
 
+    fillProgressBar(percentage = 0) {
+        const progressBarEmpty = PomodoroConfig.EMOJIS_BAR.FIRST_EMPTY + PomodoroConfig.EMOJIS_BAR.MIDDLE_EMPTY.repeat(8) + PomodoroConfig.EMOJIS_BAR.LAST_EMPTY;
+    
+        var filled = Math.round(percentage / 10);
+    
+        if (filled === 0 || filled > 10) {
+            return progressBarEmpty;
+        }
+    
+        else if (filled === 1) {
+            return PomodoroConfig.EMOJIS_BAR.FIRST_FULL + PomodoroConfig.EMOJIS_BAR.MIDDLE_EMPTY.repeat(8) + PomodoroConfig.EMOJIS_BAR.LAST_EMPTY;
+        }
+    
+        else if (filled > 1 && filled <= 9) {
+            return PomodoroConfig.EMOJIS_BAR.FIRST_FULL + PomodoroConfig.EMOJIS_BAR.MIDDLE_FULL.repeat(filled - 1) + PomodoroConfig.EMOJIS_BAR.MIDDLE_EMPTY.repeat(9 - filled) + PomodoroConfig.EMOJIS_BAR.LAST_EMPTY;
+        }
+    
+        else if (filled === 10) {
+            return PomodoroConfig.EMOJIS_BAR.FIRST_FULL + PomodoroConfig.EMOJIS_BAR.MIDDLE_FULL.repeat(8) + PomodoroConfig.EMOJIS_BAR.LAST_FULL;
+        }
+    }
+
 }
 
-function fillProgressBar(percentage = 0) {
-    const progressBarEmpty = PomodoroConfig.EMOJIS_BAR.FIRST_EMPTY + PomodoroConfig.EMOJIS_BAR.MIDDLE_EMPTY.repeat(8) + PomodoroConfig.EMOJIS_BAR.LAST_EMPTY;
-
-    var filled = Math.round(percentage / 10);
-
-    if (filled === 0 || filled > 10) {
-        return progressBarEmpty;
-    }
-
-    else if (filled === 1) {
-        return PomodoroConfig.EMOJIS_BAR.FIRST_FULL + PomodoroConfig.EMOJIS_BAR.MIDDLE_EMPTY.repeat(8) + PomodoroConfig.EMOJIS_BAR.LAST_EMPTY;
-    }
-
-    else if (filled > 1 && filled <= 9) {
-        return PomodoroConfig.EMOJIS_BAR.FIRST_FULL + PomodoroConfig.EMOJIS_BAR.MIDDLE_FULL.repeat(filled - 1) + PomodoroConfig.EMOJIS_BAR.MIDDLE_EMPTY.repeat(9 - filled) + PomodoroConfig.EMOJIS_BAR.LAST_EMPTY;
-    }
-
-    else if (filled === 10) {
-        return PomodoroConfig.EMOJIS_BAR.FIRST_FULL + PomodoroConfig.EMOJIS_BAR.MIDDLE_FULL.repeat(8) + PomodoroConfig.EMOJIS_BAR.LAST_FULL;
-    }
-
-}
 
 module.exports = PomodoroSession;
