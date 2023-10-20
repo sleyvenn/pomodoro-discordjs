@@ -1,4 +1,3 @@
-const PomodoroSession = require('./PomodoroSession');
 const dbConnection = require('../database/connection');
 const formatDateToSQL = require('../utils/formatDate');
 

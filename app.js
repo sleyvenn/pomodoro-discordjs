@@ -27,6 +27,8 @@ const PomodoroContainer = require('./models/PomodoroContainer');
 client.pomodoroContainer = PomodoroContainer;
 const PomodoroSession = require('./models/PomodoroSession');
 
+const randomEmoji = require('./utils/randomEmoji');
+
 
 readdirSync("./commands/").map(async dir => {
     readdirSync(`./commands/${dir}/`).map(async (cmd) => {
@@ -123,7 +125,7 @@ client.on("interactionCreate", async (interaction) => {
                 if (pomodoroSession) {
                     pomodoroSession.cancelPomodoro();
                     client.pomodoroContainer.removePomodoroSession(pomodoroSession);
-                    await interaction.editReply({ content: "Pomodoro cancelado.", ephemeral: true })
+                    // await interaction.editReply({ content: "Pomodoro cancelado.", ephemeral: true })
                 } else {
                     await interaction.editReply({ content: "No puedes cancelar esta sesión pomodoro.", ephemeral: true })
                 }
@@ -173,7 +175,7 @@ client.on("voiceStateUpdate", (oldState, newState) => {
             })
         } else {
             newState.guild.channels.create({
-                name: `Sesión de ${newState.member.displayName}`,
+                name: `${randomEmoji.get()} Sesión de ${newState.member.displayName}`,
                 type: ChannelType.GuildVoice,
                 parent: process.env.DISCORD_CATEGORY_ID,
                 bitrate: 64000,

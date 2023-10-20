@@ -11,16 +11,11 @@ function addZero(i) {
     return i;
 }
 
-function totalTime(workTime,shortBreak,longBreak, loop){
-    var totalTime = (((workTime + shortBreak) * 3) + (workTime + longBreak)) * loop;
-            
-    totalTime = minToMs(totalTime);
-    
-    const hours = Math.floor(totalTime / 3600000) % 24
-    const minutes = Math.floor(totalTime / 60000) % 60
-    const seconds = Math.floor(totalTime / 1000) % 60
-
-    return addZero(hours) + ":" + addZero(minutes) + ":" + addZero(seconds)
+function totalTime(ms){
+    let h = addZero(Math.floor(ms / 1000 / 60 / 60));
+    let m = addZero(Math.floor(ms / 1000 / 60) % 60);
+    let s = addZero(Math.floor(ms / 1000) % 60);
+    return h + ":" + m + ":" + s;
 }
 
 function getCurrentHour(){

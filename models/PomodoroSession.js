@@ -6,6 +6,7 @@ const { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } = require('
 const { joinVoiceChannel, createAudioPlayer, AudioPlayerStatus, createAudioResource } = require("@discordjs/voice");
 const PomodoroConfig = require('../models/PomodoroConfig');
 
+
 class PomodoroSession {
 
     constructor(client, user, voiceChannel) {
@@ -53,7 +54,6 @@ class PomodoroSession {
                     clearInterval(this.timer);
                     break;
                 case PomodoroConfig.STATUS.CANCELLED:
-                    // this.voiceChannel.delete();
                     clearInterval(this.timer);
                     break;
                 default:
@@ -148,7 +148,20 @@ class PomodoroSession {
             this.voiceChannelAlert();
             this.updateEmbedMessage();
             this.remainingTime = timerConverter.minToMs(this.currentPhase.duration);
-            this.client.users.cache.get(this.user.id).send({ content: "Ha comenzado la fase de **" + this.currentPhase.name + "**." });
+
+            switch (this.currentPhase) {
+                case PomodoroConfig.PHASES.FOCUS:
+                    this.client.users.cache.get(this.user.id).send({ content: PomodoroConfig.FOCUS_PHRASES[Math.floor(Math.random() * PomodoroConfig.FOCUS_PHRASES.length)] });
+                    break;
+                case PomodoroConfig.PHASES.SHORT_BREAK:
+                    this.client.users.cache.get(this.user.id).send({ content: PomodoroConfig.SHORT_BREAK_PHRASES[Math.floor(Math.random() * PomodoroConfig.SHORT_BREAK_PHRASES.length)] });
+                    break;
+                case PomodoroConfig.PHASES.LONG_BREAK:
+                    this.client.users.cache.get(this.user.id).send({ content: PomodoroConfig.LONG_BREAK_PHRASES[Math.floor(Math.random() * PomodoroConfig.LONG_BREAK_PHRASES.length)] });
+                    break;
+                default:
+                    break;
+            }
         }
     }
 
@@ -163,7 +176,6 @@ class PomodoroSession {
             var embedMessage = new EmbedBuilder()
                 .setColor("#2b2d31")
                 .setTitle("Estado de la sesión")
-                // .setImage(this.user.avatarURL)
                 .addFields(
                     { name: "Fase", value: this.currentPhase.name, inline: true },
                     { name: "Siguiente Fase", value: PomodoroConfig.PHASE_ORDER[this.currentPhaseIndex + 1]?.name ?? "Fin", inline: true },
@@ -217,7 +229,6 @@ class PomodoroSession {
         var embedMessage = new EmbedBuilder()
             .setColor("#2b2d31")
             .setTitle("Estado de la sesión")
-            // .setImage(this.user.avatarURL)
             .addFields(
                 { name: "Fase", value: this.currentPhase.name, inline: true },
                 { name: "Siguiente Fase", value: PomodoroConfig.PHASE_ORDER[this.currentPhaseIndex + 1].name || "Fin", inline: true },
@@ -228,7 +239,7 @@ class PomodoroSession {
                         "\nEste canal de voz será eliminado una vez finalice o canceles la sesión.",
                     inline: false
                 },
-                { name: "Progreso", value: `${this.fillProgressBar()} - 0%`, inline: true },
+                { name: "Progreso", value: `${this.fillProgressBar(0)} - 0%`, inline: true },
             )
             .setTimestamp()
 
@@ -265,7 +276,6 @@ class PomodoroSession {
     }
 
     voiceChannelAlert() {
-        //check if voice channel has users connected
         if (this.voiceChannel.members.size === 0) return;
 
         const connection = joinVoiceChannel({
@@ -283,23 +293,23 @@ class PomodoroSession {
         });
     }
 
-    fillProgressBar(percentage = 0) {
+    fillProgressBar(percentage) {
         const progressBarEmpty = PomodoroConfig.EMOJIS_BAR.FIRST_EMPTY + PomodoroConfig.EMOJIS_BAR.MIDDLE_EMPTY.repeat(8) + PomodoroConfig.EMOJIS_BAR.LAST_EMPTY;
-    
+
         var filled = Math.round(percentage / 10);
-    
+
         if (filled === 0 || filled > 10) {
             return progressBarEmpty;
         }
-    
+
         else if (filled === 1) {
             return PomodoroConfig.EMOJIS_BAR.FIRST_FULL + PomodoroConfig.EMOJIS_BAR.MIDDLE_EMPTY.repeat(8) + PomodoroConfig.EMOJIS_BAR.LAST_EMPTY;
         }
-    
+
         else if (filled > 1 && filled <= 9) {
             return PomodoroConfig.EMOJIS_BAR.FIRST_FULL + PomodoroConfig.EMOJIS_BAR.MIDDLE_FULL.repeat(filled - 1) + PomodoroConfig.EMOJIS_BAR.MIDDLE_EMPTY.repeat(9 - filled) + PomodoroConfig.EMOJIS_BAR.LAST_EMPTY;
         }
-    
+
         else if (filled === 10) {
             return PomodoroConfig.EMOJIS_BAR.FIRST_FULL + PomodoroConfig.EMOJIS_BAR.MIDDLE_FULL.repeat(8) + PomodoroConfig.EMOJIS_BAR.LAST_FULL;
         }
